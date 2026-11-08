@@ -3,107 +3,76 @@
 import { useState } from 'react';
 import axios from 'axios';
 
-const BACKEND = 'http://localhost:8080';
+const BACKEND_BASE = 'http://localhost:8080';
+const UPLOAD_ENDPOINT = `${BACKEND_BASE}/api/upload`;
 
-export default function RbacDemoPage() {
-  // Signup State
-  const [signupEmail, setSignupEmail] = useState('');
-  const [signupPassword, setSignupPassword] = useState('');
-  const [signupRole, setSignupRole] = useState('manager');
+export default function FileUploadDemo() {
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
 
-  // Login State
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
+  // 1. File Select & Preview Handler
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
 
-  // Current Session State
-  const [token, setToken] = useState('');
-  const [loggedInUser, setLoggedInUser] = useState(null);
+    setSelectedFile(file);
+    setError(null);
+    setSuccess(null);
 
-  // Response / Status States
-  const [statusMsg, setStatusMsg] = useState(null);
-  const [errorMsg, setErrorMsg] = useState(null);
-  const [routeResult, setRouteResult] = useState(null);
-
-  // 1. SIGNUP HANDLER
-  const handleSignup = async (e) => {
+    // Agar image hai toh local preview banao
+    if (file.type.startsWith('image/')) {
+      setPreviewUrl(URL.createObjectURL(file));
+    } else {
+      setPreviewUrl(null); // Document/PDF ke liye preview nahi
+    }
+  };
+const handleUpload = async (e) => {
     e.preventDefault();
-    setStatusMsg(null);
-    setErrorMsg(null);
-    try {
-      await axios.post(`${BACKEND}/auth/signup`, {
-        id: 0,
-        email: signupEmail,
-        password: signupPassword,
-        role: signupRole,
-      });
-      setStatusMsg(`✅ Account created successfully as [${signupRole.toUpperCase()}]! Ab login karein.`);
-      setLoginEmail(signupEmail);
-      setLoginPassword(signupPassword);
-    } catch (err) {
-      setErrorMsg(err.response?.data?.message || err.response?.data || 'Signup failed!');
+    if (!selectedFile) {
+      setError('Pehle koi file ya image select karein!');
+      return;
     }
-  };
 
-  // 2. LOGIN HANDLER
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setStatusMsg(null);
-    setErrorMsg(null);
-    setRouteResult(null);
+    setUploading(true);
+    setError(null);
+    setSuccess(null);
+
     try {
-      const res = await axios.post(`${BACKEND}/auth/login`, {
-        email: loginEmail,
-        password: loginPassword,
-      });
+      const formData = new FormData();
+      formData.append('file', selectedFile);
 
-      const userToken = res.data.token;
-      setToken(userToken);
+      // THE FIX: headers wala hissa bilkul hata diya hai
+      const res = await axios.post(UPLOAD_ENDPOINT, formData);
 
-      // Decode JWT token to get Role & Email
-      const payloadBase64 = userToken.split('.')[1];
-      const decoded = JSON.parse(atob(payloadBase64));
+      if (res.data.success && res.data.urls?.length > 0) {
+        setSuccess('🎉 File successfully uploaded to Rust backend!');
+        
+        const newUrls = res.data.urls.map((urlPath) => ({
+          name: selectedFile.name,
+          url: `${BACKEND_BASE}${urlPath}`,
+          type: selectedFile.type,
+        }));
 
-      setLoggedInUser({
-        email: decoded.sub,
-        role: decoded.role,
-      });
+        setUploadedFiles((prev) => [...newUrls, ...prev]);
 
-      setStatusMsg(`🎉 Logged in as: ${decoded.sub} (Role: ${decoded.role.toUpperCase()})`);
+        setSelectedFile(null);
+        setPreviewUrl(null);
+      }
     } catch (err) {
-      setErrorMsg(err.response?.data?.message || err.response?.data || 'Login failed! Invalid credentials.');
+      console.error(err);
+      setError(
+        err.response?.data?.message ||
+        err.response?.data ||
+        'Upload fail ho gaya!'
+      );
+    } finally {
+      setUploading(false);
     }
-  };
-
-  // 3. TEST MANAGER ROUTE (/manager/dashboard)
-  const testManagerRoute = async () => {
-    setRouteResult(null);
-    try {
-      const res = await axios.get(`${BACKEND}/manager/dashboard`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setRouteResult({ success: true, text: res.data });
-    } catch (err) {
-      setRouteResult({
-        success: false,
-        text: err.response?.data || 'Access Denied! You do not have the manager role.',
-      });
-    }
-  };
-
-  // 4. TEST EDITOR ROUTE (/editor/dashboard)
-  const testEditorRoute = async () => {
-    setRouteResult(null);
-    try {
-      const res = await axios.get(`${BACKEND}/editor/dashboard`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setRouteResult({ success: true, text: res.data });
-    } catch (err) {
-      setRouteResult({
-        success: false,
-        text: err.response?.data || 'Access Denied! You do not have the editor role.',
-      });
-    }
+  
   };
 
   return (
@@ -111,174 +80,143 @@ export default function RbacDemoPage() {
       {/* Title */}
       <div className="text-center mb-8">
         <h1 className="text-3xl font-black text-indigo-600">
-          🛡️ Flexible RBAC (Role-Based Access Control)
+          📁 1-Line Universal File & Image Uploads
         </h1>
         <p className="text-gray-500 text-sm mt-1">
-          Don Framework Custom Guards (ManagerGuard vs EditorGuard) + Next.js
+          Don Framework (Axum Multipart + Static File Serving) + Next.js
         </p>
       </div>
 
       {/* Notifications */}
-      {statusMsg && (
+      {success && (
         <div className="bg-green-100 border border-green-400 text-green-800 p-4 rounded-xl mb-6 text-sm font-semibold">
-          {statusMsg}
+          {success}
         </div>
       )}
-      {errorMsg && (
+      {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 p-4 rounded-xl mb-6 text-sm font-semibold">
-          🛑 {errorMsg}
+          🛑 {error}
         </div>
       )}
 
-      {/* Current Session Bar */}
-      {loggedInUser && (
-        <div className="bg-slate-900 text-white p-4 rounded-xl mb-8 flex justify-between items-center shadow-lg">
-          <div>
-            <span className="text-xs text-gray-400 uppercase tracking-wider block">Active Session:</span>
-            <span className="font-bold text-emerald-400">{loggedInUser.email}</span>
-            <span className="ml-3 text-xs bg-indigo-600 px-2.5 py-1 rounded-full font-bold uppercase">
-              Role: {loggedInUser.role}
-            </span>
-          </div>
-          <button
-            onClick={() => {
-              setToken('');
-              setLoggedInUser(null);
-              setRouteResult(null);
-            }}
-            className="text-xs bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg font-bold transition"
-          >
-            Logout
-          </button>
-        </div>
-      )}
+      {/* Upload Box Card */}
+      <div className="bg-white p-8 rounded-2xl shadow border mb-8">
+        <h2 className="text-lg font-bold text-gray-800 mb-4">
+          Upload Any File (Images, PDFs, Docs)
+        </h2>
 
-      {/* Top Section: Signup & Login Forms */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        
-        {/* Form 1: Signup with Role Selection */}
-        <div className="bg-white p-6 rounded-2xl shadow border">
-          <h2 className="text-lg font-bold text-gray-800 mb-4">1. Register with Role</h2>
-          <form onSubmit={handleSignup} className="space-y-3">
-            <div>
-              <label className="text-xs font-semibold text-gray-600 uppercase">Email</label>
-              <input
-                type="email"
-                required
-                value={signupEmail}
-                onChange={(e) => setSignupEmail(e.target.value)}
-                placeholder="e.g. boss@corp.com"
-                className="w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-600 uppercase">Password</label>
-              <input
-                type="password"
-                required
-                value={signupPassword}
-                onChange={(e) => setSignupPassword(e.target.value)}
-                placeholder="••••••"
-                className="w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-600 uppercase">Select Role</label>
-              <select
-                value={signupRole}
-                onChange={(e) => setSignupRole(e.target.value)}
-                className="w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-              >
-                <option value="manager">Manager</option>
-                <option value="editor">Editor</option>
-                <option value="user">Normal User</option>
-              </select>
-            </div>
-            <button
-              type="submit"
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-lg text-sm transition"
+        <form onSubmit={handleUpload} className="space-y-6">
+          {/* File Picker Area */}
+          <div className="border-2 border-dashed border-indigo-200 rounded-2xl p-6 text-center hover:border-indigo-400 transition bg-indigo-50/30">
+            <input
+              type="file"
+              id="fileInput"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+            <label
+              htmlFor="fileInput"
+              className="cursor-pointer flex flex-col items-center justify-center gap-2"
             >
-              Sign Up
-            </button>
-          </form>
-        </div>
+              <div className="w-12 h-12 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-2xl font-bold">
+                📤
+              </div>
+              <span className="text-sm font-semibold text-gray-700">
+                {selectedFile ? selectedFile.name : 'Click to select or drop an image/file here'}
+              </span>
+              <span className="text-xs text-gray-400">
+                Supports PNG, JPG, WEBP, PDF, TXT (Auto-assigned unique UUID)
+              </span>
+            </label>
+          </div>
 
-        {/* Form 2: Login */}
-        <div className="bg-white p-6 rounded-2xl shadow border">
-          <h2 className="text-lg font-bold text-gray-800 mb-4">2. Login to Get Token</h2>
-          <form onSubmit={handleLogin} className="space-y-3">
-            <div>
-              <label className="text-xs font-semibold text-gray-600 uppercase">Email</label>
-              <input
-                type="email"
-                required
-                value={loginEmail}
-                onChange={(e) => setLoginEmail(e.target.value)}
-                placeholder="e.g. boss@corp.com"
-                className="w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+          {/* Local Preview before Upload */}
+          {previewUrl && (
+            <div className="p-4 border rounded-xl bg-gray-50 flex items-center gap-4">
+              <img
+                src={previewUrl}
+                alt="Preview"
+                className="w-20 h-20 object-cover rounded-lg border shadow-sm"
               />
+              <div>
+                <p className="text-xs text-gray-400 uppercase font-bold">Ready to Upload:</p>
+                <p className="text-sm font-bold text-gray-800">{selectedFile?.name}</p>
+                <p className="text-xs text-gray-500 font-mono">
+                  {(selectedFile.size / 1024).toFixed(1)} KB
+                </p>
+              </div>
             </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-600 uppercase">Password</label>
-              <input
-                type="password"
-                required
-                value={loginPassword}
-                onChange={(e) => setLoginPassword(e.target.value)}
-                placeholder="••••••"
-                className="w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <div className="pt-7">
-              <button
-                type="submit"
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-lg text-sm transition"
-              >
-                Log In
-              </button>
-            </div>
-          </form>
-        </div>
+          )}
 
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={!selectedFile || uploading}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-bold py-3 rounded-xl transition shadow flex items-center justify-center gap-2 text-sm"
+          >
+            {uploading ? 'Rust Backend par upload ho raha hai...' : '⚡ Upload to Rust Server'}
+          </button>
+        </form>
       </div>
 
-      {/* Bottom Section: Test Protected Routes */}
-      <div className="bg-white p-6 rounded-2xl shadow border">
-        <h2 className="text-lg font-bold text-gray-800 mb-2">3. Test Protected Endpoints</h2>
-        <p className="text-xs text-gray-500 mb-6">
-          Neechay diye gaye buttons par click karein aur dekhein ke Rust ka `DonGuard` kis tarah unauthorized roles ko block karta hai:
+      {/* Uploaded Files Gallery */}
+      <div className="bg-white p-8 rounded-2xl shadow border">
+        <h2 className="text-lg font-bold text-gray-800 mb-2">
+          🖼️ Live Uploaded Files (Direct from Rust Server)
+        </h2>
+        <p className="text-xs text-gray-400 mb-6">
+          Yeh files direct Rust backend ke <code>/uploads</code> static route se serve ho rahi hain:
         </p>
 
-        <div className="flex flex-col sm:flex-row gap-4 mb-6">
-          <button
-            onClick={testManagerRoute}
-            disabled={!token}
-            className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-bold py-3 px-4 rounded-xl transition text-sm shadow flex items-center justify-center gap-2"
-          >
-            📊 Test /manager/dashboard
-          </button>
-          <button
-            onClick={testEditorRoute}
-            disabled={!token}
-            className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white font-bold py-3 px-4 rounded-xl transition text-sm shadow flex items-center justify-center gap-2"
-          >
-            📝 Test /editor/dashboard
-          </button>
-        </div>
+        {uploadedFiles.length === 0 ? (
+          <div className="text-center p-8 text-gray-400 text-sm italic bg-gray-50 rounded-xl">
+            Abhi tak koi file upload nahi hui. Upar se pehli photo ya file upload karein!
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            {uploadedFiles.map((item, index) => (
+              <div
+                key={index}
+                className="border rounded-xl p-3 bg-gray-50 flex flex-col justify-between shadow-sm"
+              >
+                {/* Agar image hai toh photo dikhao */}
+                {item.type?.startsWith('image/') ? (
+                  <img
+                    src={item.url}
+                    alt={item.name}
+                    className="w-full h-36 object-cover rounded-lg mb-2 border"
+                  />
+                ) : (
+                  <div className="w-full h-36 bg-indigo-100 rounded-lg flex items-center justify-center text-4xl mb-2">
+                    📄
+                  </div>
+                )}
 
-        {/* Route Execution Result */}
-        {routeResult && (
-          <div
-            className={`p-4 rounded-xl text-sm font-semibold border ${
-              routeResult.success
-                ? 'bg-green-50 border-green-300 text-green-800'
-                : 'bg-red-50 border-red-300 text-red-700'
-            }`}
-          >
-            <p className="text-xs uppercase tracking-wider font-bold mb-1">
-              {routeResult.success ? '✅ Status: 200 OK (Access Granted)' : '🛑 Status: 403 Forbidden (Blocked)'}
-            </p>
-            <p className="font-mono">{routeResult.text}</p>
+                <div className="space-y-1">
+                  <p className="text-xs font-bold text-gray-800 truncate" title={item.name}>
+                    {item.name}
+                  </p>
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-indigo-600 font-mono hover:underline truncate block"
+                  >
+                    Open Live File ↗
+                  </a>
+                </div>
+
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(item.url);
+                    alert('URL copied to clipboard!');
+                  }}
+                  className="mt-3 w-full bg-white hover:bg-gray-100 border text-gray-700 text-xs font-bold py-1.5 rounded-lg transition"
+                >
+                  📋 Copy URL
+                </button>
+              </div>
+            ))}
           </div>
         )}
       </div>
