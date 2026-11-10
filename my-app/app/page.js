@@ -30,7 +30,9 @@ export default function FileUploadDemo() {
       setPreviewUrl(null); // Document/PDF ke liye preview nahi
     }
   };
-const handleUpload = async (e) => {
+// src/app/page.js ke andar handleUpload function ko is se replace karein:
+
+  const handleUpload = async (e) => {
     e.preventDefault();
     if (!selectedFile) {
       setError('Pehle koi file ya image select karein!');
@@ -45,13 +47,22 @@ const handleUpload = async (e) => {
       const formData = new FormData();
       formData.append('file', selectedFile);
 
-      // THE FIX: headers wala hissa bilkul hata diya hai
-      const res = await axios.post(UPLOAD_ENDPOINT, formData);
+      // JADOO: Browser native fetch (No Axios boundary issues!)
+      const response = await fetch(UPLOAD_ENDPOINT, {
+        method: 'POST',
+        body: formData, // Browser boundary khud lagayega
+      });
 
-      if (res.data.success && res.data.urls?.length > 0) {
+      const resData = await response.json();
+
+      if (!response.ok) {
+        throw new Error(resData.message || resData || 'Upload failed on server');
+      }
+
+      if (resData.success && resData.urls?.length > 0) {
         setSuccess('🎉 File successfully uploaded to Rust backend!');
-        
-        const newUrls = res.data.urls.map((urlPath) => ({
+
+        const newUrls = resData.urls.map((urlPath) => ({
           name: selectedFile.name,
           url: `${BACKEND_BASE}${urlPath}`,
           type: selectedFile.type,
@@ -64,14 +75,11 @@ const handleUpload = async (e) => {
       }
     } catch (err) {
       console.error(err);
-      setError(
-        err.response?.data?.message ||
-        err.response?.data ||
-        'Upload fail ho gaya!'
-      );
+      setError(err.message || 'Upload fail ho gaya!');
     } finally {
       setUploading(false);
     }
+  
   
   };
 

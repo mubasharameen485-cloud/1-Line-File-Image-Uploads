@@ -410,9 +410,9 @@ dependencies = [
 
 [[package]]
 name = "don_core"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c775be19a8c3481d0c4cdd1902d2768ea978b02eb0c3e7a5fb72d49287e39695"
+checksum = "aa57c7e132d4bf9fe02e60d351b85cd20b4b03c60531041355f6dd3ac0587059"
 dependencies = [
  "argon2",
  "axum",
@@ -434,9 +434,9 @@ dependencies = [
 
 [[package]]
 name = "don_macros"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "715f1d250752088839f45fc7bf780f1273895f28b6f083a57cd25e762ac77dc1"
+checksum = "be33c0984a672a4c35b97313f6494fe7057cc7aa4809f8c842780e7a9af2e85d"
 dependencies = [
  "proc-macro2",
  "quote",
